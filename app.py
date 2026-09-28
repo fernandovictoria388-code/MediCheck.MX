@@ -102,7 +102,7 @@ def cofepris_live_lookup(req:VerifyRequest):
     if known(req.manufacturer): terms.append('Fabricante: '+req.manufacturer)
     if not terms: return None
     query='\n'.join(terms)
-    prompt='''Actúa como verificador documental de COFEPRIS México. Debes consultar información pública ACTUAL usando Google Search, pero SOLO puedes aceptar evidencia de dominios oficiales de COFEPRIS: registros.cofepris.gob.mx y www.gob.mx/cofepris (incluidos subdominios oficiales de cofepris.gob.mx).\n\nBusca coincidencias exactas o inequívocas para el medicamento indicado. Prioriza el Visor de Registros de Medicamentos de COFEPRIS y sus páginas de detalle. NO uses farmacias, blogs, Wikipedia, redes sociales ni otros sitios como evidencia.\n\nReglas estrictas:\n1) No inventes ningún campo.\n2) Si un campo no aparece explícitamente en una fuente oficial, devuelve "No identificado".\n3) Un registro encontrado NO demuestra que el envase físico sea auténtico.\n4) Distingue registro vigente de cancelado/revocado si la fuente lo indica.\n5) Si no encuentras una coincidencia oficial suficiente, found=false.\n6) Devuelve SOLO JSON válido con los campos solicitados.\n\nDatos proporcionados por la app:\n'''+query
+    prompt='''Actúa como verificador documental de COFEPRIS México. Debes consultar información pública ACTUAL usando Google Search, pero SOLO puedes aceptar evidencia de dominios oficiales de COFEPRIS: registros.cofepris.gob.mx y www.gob.mx/cofepris (incluidos subdominios oficiales de cofepris.gob.mx).\n\nBusca coincidencias exactas o inequívocas para el medicamento indicado. Prioriza el Visor de Registros de Medicamentos de COFEPRIS y sus páginas de detalle. Si Google Search devuelve una fuente oficial mediante una URL de proxy de grounding, considérala válida cuando el resultado esté identificado como COFEPRIS/gob.mx. NO uses farmacias, blogs, Wikipedia, redes sociales ni otros sitios como evidencia.\n\nReglas estrictas:\n1) No inventes ningún campo.\n2) Si un campo no aparece explícitamente en una fuente oficial, devuelve "No identificado".\n3) Un registro encontrado NO demuestra que el envase físico sea auténtico.\n4) Distingue registro vigente de cancelado/revocado si la fuente lo indica.\n5) Si no encuentras una coincidencia oficial suficiente, found=false.\n6) Devuelve SOLO JSON válido con los campos solicitados.\n\nDatos proporcionados por la app:\n'''+query
     schema={'type':'object','properties':{
         'found':{'type':'boolean'},
         'status':{'type':'string'},
@@ -127,15 +127,28 @@ def cofepris_live_lookup(req:VerifyRequest):
         clean=text.replace('```json','').replace('```','').strip()
         result=json.loads(clean)
         result['_grounding_sources']=grounding_sources(data)
-        # Keep only official sources as accepted evidence.
+        # Google Grounding may return proxy URLs such as vertexaisearch.cloud.google.com
+        # while the title identifies the actual source domain. Do not discard valid
+        # official evidence merely because the URI is a Google grounding proxy.
         official=[]
-        for s in result.get('_grounding_sources',[]):
-            u=s.get('url','')
-            if re.search(r'(^https?://)?([^/]*\.)?cofepris\.gob\.mx(?:/|$)',u,re.I) or 'gob.mx/cofepris' in u.lower():
-                official.append(s)
+        for src in result.get('_grounding_sources',[]):
+            u=(src.get('url') or '').strip()
+            title=(src.get('title') or '').strip()
+            official_uri=bool(re.search(r'(^https?://)?([^/]*\.)?cofepris\.gob\.mx(?:/|$)',u,re.I) or 'gob.mx/cofepris' in u.lower())
+            official_title=bool(re.search(r'cofepris',title,re.I) or re.search(r'\bgob\.mx\b',title,re.I))
+            if official_uri or official_title:
+                src['official_evidence']=True
+                official.append(src)
         result['_grounding_sources']=official
+        # If the model supplied a non-official source_url, replace it with the
+        # official COFEPRIS viewer rather than treating the result as unusable.
         if result.get('source_url') and not (re.search(r'cofepris\.gob\.mx',result['source_url'],re.I) or 'gob.mx/cofepris' in result['source_url'].lower()):
-            result['source_url']=''
+            result['source_url']=COFEPRIS_VIEWER
+        # A found result is accepted only when there is actual official grounding
+        # evidence. This prevents an ungrounded Gemini answer from becoming FOUND.
+        if not result.get('_grounding_sources'):
+            return None
+        result['official_evidence']=True
         return result
     except (ValueError, json.JSONDecodeError):
         return None
