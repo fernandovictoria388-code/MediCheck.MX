@@ -1,26 +1,25 @@
-# MediCheck MX backend
+# Despliegue MediCheck MX V49
 
-## 1. Configurar Gemini
-No pongas la API key en Android. En el proveedor del servidor define `GEMINI_API_KEY`.
+## 1. Render
+El servicio V49 usa Docker y arranca con `start_server.sh`.
 
-Modelo por defecto: `gemini-3.8-flash`.
-
-## 2. COFEPRIS
-El servidor descubre los enlaces desde la página oficial:
-https://www.gob.mx/cofepris/documentos/registros-sanitarios-medicamentos
-
-`POST /sync` descarga los documentos seleccionados y crea `data/cofepris.sqlite3` y `data/sync_manifest.json`.
-
-Variables:
-- `COFEPRIS_YEARS=2026` (puedes usar `2025,2026`)
+Variables opcionales:
 - `AUTO_SYNC=1`
+- `AUTO_SYNC_HOURS=24`
+- `COFEPRIS_YEARS=2026`
+- `COFEPRIS_STATUS_YEARS=2022,2023,2024,2025,2026`
+- `SYNC_TOKEN` para proteger la sincronización manual.
 
-## 3. Probar
-- GET `/health`
-- GET `/gemini/status`
-- GET `/sources`
-- POST `/sync`
-- POST `/analyze-and-verify`
+**No se requiere `GEMINI_API_KEY`.**
 
-## 4. Android
-Configura en la app la URL HTTPS pública del backend, por ejemplo `https://tu-servidor.example.com/`. No uses `localhost` en la APK instalada en el teléfono.
+## 2. Verificación
+Después del despliegue abre `/health` y comprueba:
+- `service`: `medicheck-v49`
+- `gemini`: `false`
+- `recognition_engine`: `motor_reconocimiento_v49`
+- `records`: número de registros cargados.
+
+## 3. Flujo
+Android realiza el escaneo de código y OCR. El servidor compara esos datos con la base COFEPRIS mediante `motor_reconocimiento.py`.
+
+La coincidencia no equivale por sí sola a autenticidad física del envase.
