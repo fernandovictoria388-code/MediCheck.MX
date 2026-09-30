@@ -1,13 +1,26 @@
-# Deploy v33
+# MediCheck MX backend
 
-1. Sube el contenido de esta carpeta al repositorio de GitHub que usa Render.
-2. En Render conserva `GEMINI_API_KEY` con tu clave nueva. No la pongas en GitHub ni APK.
-3. Define:
-   - `GEMINI_MODEL=gemini-3.8-flash`
-   - `COFEPRIS_LIVE_SEARCH=1`
-   - `AUTO_SYNC=0`
-4. Haz un nuevo deploy.
-5. Comprueba `/health`. Debe mostrar `cofepris_live_search: true`.
-6. La aplicación puede verificar medicamentos aunque la sincronización masiva de PDFs de gob.mx esté temporalmente bloqueada.
+## 1. Configurar Gemini
+No pongas la API key en Android. En el proveedor del servidor define `GEMINI_API_KEY`.
 
-La sincronización masiva sigue disponible con `POST /sync`; no se usa automáticamente para no retrasar el arranque cuando el índice documental oficial está inaccesible.
+Modelo por defecto: `gemini-3.8-flash`.
+
+## 2. COFEPRIS
+El servidor descubre los enlaces desde la página oficial:
+https://www.gob.mx/cofepris/documentos/registros-sanitarios-medicamentos
+
+`POST /sync` descarga los documentos seleccionados y crea `data/cofepris.sqlite3` y `data/sync_manifest.json`.
+
+Variables:
+- `COFEPRIS_YEARS=2026` (puedes usar `2025,2026`)
+- `AUTO_SYNC=1`
+
+## 3. Probar
+- GET `/health`
+- GET `/gemini/status`
+- GET `/sources`
+- POST `/sync`
+- POST `/analyze-and-verify`
+
+## 4. Android
+Configura en la app la URL HTTPS pública del backend, por ejemplo `https://tu-servidor.example.com/`. No uses `localhost` en la APK instalada en el teléfono.
