@@ -1,0 +1,2 @@
+MediCheck MX Server v49.6
+Motor de verificacion robusta: nombre comercial exacto + concentracion + COFEPRIS.
